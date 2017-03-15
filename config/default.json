@@ -1,7 +1,7 @@
 {
-    "sunny-menu-url": "",
-    "downloads-dir": "",
-    "ocrwebservice-rest-url": "",
+    "sunny-menu-url": "http://restorani.sunny.lv/lv/buttons/download/6",
+    "downloads-dir": "downloads",
+    "ocrwebservice-rest-url": "http://www.ocrwebservice.com/restservices/processDocument?gettext=true",
     "ocrwebservice-username": "",
     "ocrwebservice-licence-code": ""
 }

@@ -26,7 +26,7 @@ const downloadPdf = sunnyMenuUrl => {
 }
 
 module.exports = {
-    anyCouscousToday: path => {
+    isCouscousToday: path => {
         return downloadPdf(path)
             .flatMap(OcrWebServiceModel.parsePdf)
     }

@@ -5,6 +5,7 @@ const base64 = require('base-64')
 const fs = require('fs')
 const _ = require('lodash')
 const moment = require('moment')
+const CouscousChecker = require('models/couscous-checker.model')
     
 const readFileAsJson = (path) => JSON.parse(fs.readFileSync(path, 'utf8'))
 
@@ -54,23 +55,19 @@ const parseOcrResponse = response => {
         .join('')
         .slice(0, -1)
     const parsedOcr = _.flatten(response.OCRText)
-        .join(' -newline- ')
+        .join(' -newpage- ')
         .split(new RegExp(regEx, 'gi'))
         .slice()
     if (parsedOcr && parsedOcr[moment().day()]) {
         return parsedOcr[moment().day()]
     }
-    return `CAN"T PROPERLY PARSE OCR DATA`
-}
-
-const matchCouscous = todayDishes => {
-    return !!todayDishes.match(/kuskus/)
+    throw new Error(`CAN'T PROPERLY PARSE OCR DATA`)
 }
 
 module.exports = {
     parsePdf: pdfPath => {
         return getOcrResponse(pdfPath)
             .map(parseOcrResponse)
-            .map(matchCouscous)
+            .map(CouscousChecker.isCouscousToday)
     }
 }

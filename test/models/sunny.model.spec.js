@@ -5,6 +5,7 @@ const Rx = require('rxjs/Rx')
 const sinon = require('sinon')
 const EventEmitter = require('events').EventEmitter
 const testEmitter = new EventEmitter()
+const TestUtils = require('test/test-utils')
 
 
 describe('sunny.model.spec.js', () => {
@@ -30,20 +31,11 @@ describe('sunny.model.spec.js', () => {
         sandbox = sinon.sandbox.restore()
     })
 
-    const asyncTryCatch = (done, expect) => {
-        try {
-            expect()
-            done()
-        } catch (error) {
-            done(error)
-        }
-    }
-
-    describe('anyCouscousToday', function () {
+    describe('isCouscousToday', function () {
         it('should return pdf path if pdf file exists', done => {
             sandbox.stub(targetStubs.fs, 'existsSync').returns(true)
-            targetObservable = target.anyCouscousToday().subscribe(result => {
-                asyncTryCatch(done, () => expect(result).to.match(/downloads\/sunny-\d{4}-\w{3}-\d{2}.pdf/))
+            targetObservable = target.isCouscousToday().subscribe(result => {
+                TestUtils.asyncTryCatch(done, () => expect(result).to.match(/downloads\/sunny-\d{4}-\w{3}-\d{2}.pdf/))
             })
         })
 
@@ -51,13 +43,12 @@ describe('sunny.model.spec.js', () => {
             sandbox.stub(targetStubs.fs, 'existsSync').returns(false)
             sandbox.stub(targetStubs.fs, 'createWriteStream').returns(testEmitter)
             sandbox.stub(targetStubs.request, 'get').returns({ pipe: () => { } })
-            targetObservable = target.anyCouscousToday()
-                .subscribe(result => {
-                    asyncTryCatch(done, () => {
-                        expect(result).to.match(/downloads\/sunny-\d{4}-\w{3}-\d{2}.pdf/)
+            targetObservable = target.isCouscousToday().subscribe(result => {
+                TestUtils.asyncTryCatch(done, () => {
+                    expect(result).to.match(/downloads\/sunny-\d{4}-\w{3}-\d{2}.pdf/)
 
-                    })
                 })
+            })
             testEmitter.emit('finish')
         })
 
@@ -65,10 +56,9 @@ describe('sunny.model.spec.js', () => {
             sandbox.stub(targetStubs.fs, 'existsSync').returns(false)
             sandbox.stub(targetStubs.fs, 'createWriteStream').returns(testEmitter)
             sandbox.stub(targetStubs.request, 'get').returns({ pipe: () => { } })
-            targetObservable = target.anyCouscousToday()
-                .subscribe(null, err => {
-                    asyncTryCatch(done, () => expect(err).to.equal('PROBLEM SAVING SUNNY PDF FILE'))
-                })
+            targetObservable = target.isCouscousToday().subscribe(null, err => {
+                TestUtils.asyncTryCatch(done, () => expect(err).to.equal('PROBLEM SAVING SUNNY PDF FILE'))
+            })
             testEmitter.emit('error')
         })
     })
