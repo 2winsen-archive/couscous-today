@@ -11,43 +11,53 @@ describe('index.spec.js', function () {
     let response
     let next
 
+    const routerStub = (allowedPath) => {
+        return {
+            get: (path, callback) => {
+                if (path === allowedPath) callback(null, response, next)
+            }
+        }
+    }
+
     beforeEach(() => {
         sandbox = sinon.sandbox.create()
         targetStubs = {
             'express': { Router: TestUtils.empty },
             'models/sunny.model': { isCouscousToday: TestUtils.empty }
         }
-        response = {render: TestUtils.empty}
-        sandbox.stub(response, 'render')    
-        sandbox.stub(targetStubs.express, 'Router').returns({ get: (path, callback) => callback(null, response, next) })        
+        response = { send: TestUtils.empty }
+        sandbox.stub(response, 'send')        
     })
 
     afterEach(() => {
         sandbox = sinon.sandbox.restore()
     })
 
-    describe('router.get /', function () {
-        it('should call render with correct text value when there is coucous', function () {
+    describe('router.get isCouscousToday', function () {
+        it('should call send with correct text value when there is coucous', function () {
+            sandbox.stub(targetStubs.express, 'Router').returns(routerStub('/isCouscousToday'))
             sandbox.stub(targetStubs['models/sunny.model'], 'isCouscousToday').returns(Rx.Observable.create(observer => observer.next(true)))
             proxyquire('web/routes/index', targetStubs)
-            sinon.assert.calledWith(response.render, 'index', {text: 'YES :(, damn that couscous'})
+            sinon.assert.calledWith(response.send, 'YES :(, damn that couscous')
         })
 
-        it('should call render with correct text value when there is no coucous', function () {
+        it('should call send with correct text value when there is no coucous', function () {
+            sandbox.stub(targetStubs.express, 'Router').returns(routerStub('/isCouscousToday'))
             sandbox.stub(targetStubs['models/sunny.model'], 'isCouscousToday').returns(Rx.Observable.create(observer => observer.next(false)))
             proxyquire('web/routes/index', targetStubs)
-            sinon.assert.calledWith(response.render, 'index', {text: 'Nope :)'})
+            sinon.assert.calledWith(response.send, 'Nope :)')
         })
 
         it('should pass error to next handler', function () {
+            sandbox.stub(targetStubs.express, 'Router').returns(routerStub('/isCouscousToday'))
             sandbox.stub(targetStubs['models/sunny.model'], 'isCouscousToday').returns(Rx.Observable.create(observer => observer.error('some error')))
             next = (error) => {
                 expect(error).to.be.an('error')
                 expect(error.message).to.equal('some error')
             }
-            proxyquire('web/routes/index', targetStubs)            
+            proxyquire('web/routes/index', targetStubs)
         })
-        
+
     })
 
 })

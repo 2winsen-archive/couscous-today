@@ -1,4 +1,8 @@
 extends layout
 
 block content
-  h1 #{text}
+  div(
+    id="loading-container"
+    class="loader"
+  )
+  h1(id="response-container")
