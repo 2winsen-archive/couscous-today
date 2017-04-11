@@ -3,6 +3,7 @@ const proxyquire = require('proxyquire')
 const sinon = require('sinon')
 const TestUtils = require('test/test-utils')
 const expect = require('chai').expect
+const OcrException = require('exceptions/ocr-exception')
 
 
 describe('ocr-web-service.model.spec.js', () => {
@@ -19,8 +20,9 @@ describe('ocr-web-service.model.spec.js', () => {
         targetStubs = {
             'fs': {},
             'request': {},
-            'moment': () => (momentStub),
-            'models/couscous-checker.model': {}
+            'moment': () => momentStub,
+            'models/couscous-checker.model': {},
+            'base-64': {}
         }
         target = proxyquire('models/ocr-web-service.model', targetStubs)
     })
@@ -33,10 +35,10 @@ describe('ocr-web-service.model.spec.js', () => {
     describe('parsePdf', function () {
         it('should use cached OCR data', done => {            
             sandbox.stub(targetStubs.fs, 'existsSync').returns(true)
-            sandbox.stub(targetStubs.fs, 'readFileSync').returns(JSON.stringify(testJson))
+            sandbox.stub(targetStubs.fs, 'readFileSync').returns(JSON.stringify(testJson))            
             sandbox.stub(momentStub, 'day').returns(1)
             sandbox.spy(targetStubs.request, 'post')
-            targetObservable = target.parsePdf().subscribe(() => {
+            targetObservable = target.extractPdfText().subscribe(() => {
                 TestUtils.asyncTryCatch(done, () => {
                     sinon.assert.notCalled(targetStubs.request.post)
                 })
@@ -45,19 +47,23 @@ describe('ocr-web-service.model.spec.js', () => {
 
         it('should send request to OCR service', done => {
             sandbox.stub(targetStubs.fs, 'existsSync').returns(false)
-            sandbox.stub(targetStubs.fs, 'readFileSync').returns(JSON.stringify(testJson))
-            sandbox.stub(targetStubs.fs, 'writeFileSync')
-            sandbox.stub(momentStub, 'day').returns(1)
-            sandbox.stub(targetStubs.fs, 'createReadStream')
-            sandbox.stub(targetStubs.request, 'post', (options, callback) => callback())
-            targetObservable = target.parsePdf().subscribe(() => {
+            sandbox.stub(targetStubs['base-64'], 'encode').returns('1234')
+            sandbox.stub(targetStubs.fs, 'createReadStream').returns('readStream')
+            sandbox.stub(JSON, 'parse').returns('parsedValue')
+            sandbox.stub(targetStubs.request, 'post', (options, callback) => callback(null, {}))
+            const PDF_PATH = 'pdfPath'
+            targetObservable = target.extractPdfText(PDF_PATH).subscribe(() => {
                 TestUtils.asyncTryCatch(done, () => {
                     sinon.assert.calledWith(targetStubs.request.post, sinon.match({
                         headers: {
-                            'Authorization': 'Basic TDM0MzkxNzI6RUExMzUzNjAtRjIzNi00MDUxLTk4M0YtMTI3MjNGREMyQUM1',
+                            'Authorization': 'Basic 1234',
                             'Content-Type': 'application/json'
+                        },
+                        formData: {
+                            my_file: 'readStream'
                         }
                     }))
+                    sinon.assert.calledWith(targetStubs.fs.createReadStream, PDF_PATH)
                 })
             })
         })
@@ -65,38 +71,42 @@ describe('ocr-web-service.model.spec.js', () => {
         it('should fail to send request to OCR service', done => {
             sandbox.stub(targetStubs.fs, 'existsSync').returns(false)
             sandbox.stub(targetStubs.fs, 'readFileSync').returns(JSON.stringify(testJson))
-            sandbox.stub(targetStubs.fs, 'writeFileSync')
-            sandbox.stub(momentStub, 'day').returns(1)
             sandbox.stub(targetStubs.fs, 'createReadStream')
-            sandbox.stub(targetStubs.request, 'post', (options, callback) => callback('error'))
-            targetObservable = target.parsePdf().subscribe(null, error => {
+            sandbox.stub(targetStubs.request, 'post', (options, callback) => callback('ocr error code 111', {statusCode: 500}))
+            targetObservable = target.extractPdfText().subscribe(null, error => {
                 TestUtils.asyncTryCatch(done, () => {
-                    expect(error).to.equal('UNABLE TO CONNECT TO OCR SERVICE')
+                    expect(error).to.be.instanceof(OcrException)
+                    expect(error.message).to.equal('OCR COMMUNICATION ERROR - ocr error code 111')
                 })
             })
         })
 
-        it('should return today menu item', done => {
-            sandbox.stub(targetStubs.fs, 'existsSync').returns(true)
+        it('should receive ErrorMessage from OCR service', done => {
+            sandbox.stub(targetStubs.fs, 'existsSync').returns(false)
             sandbox.stub(targetStubs.fs, 'readFileSync').returns(JSON.stringify(testJson))
-            sandbox.stub(targetStubs['models/couscous-checker.model'], 'isCouscousToday')
-            sandbox.stub(momentStub, 'day').returns(1)
-            targetObservable = target.parsePdf().subscribe(() => {
+            sandbox.stub(targetStubs.fs, 'createReadStream')
+            sandbox.stub(targetStubs.request, 'post', (options, callback) => callback(null, {}))
+            sandbox.stub(JSON, 'parse').returns({ErrorMessage: 'ocr error 222'})
+            targetObservable = target.extractPdfText().subscribe(null, error => {
                 TestUtils.asyncTryCatch(done, () => {
-                    sinon.assert.calledWith(targetStubs['models/couscous-checker.model'].isCouscousToday, ' AA ')
+                    expect(error).to.be.instanceof(OcrException)
+                    expect(error.message).to.equal('OCR RESPONSE ERROR - ocr error 222')
                 })
             })
-        })
+        })        
 
-        it('should fail to return today menu item', () => {
-            sandbox.stub(targetStubs.fs, 'existsSync').returns(true)
+        it('should extrace OCR response', done => {
+            sandbox.stub(targetStubs.fs, 'existsSync').returns(false)
             sandbox.stub(targetStubs.fs, 'readFileSync').returns(JSON.stringify(testJson))
-            sandbox.stub(targetStubs['models/couscous-checker.model'], 'isCouscousToday')
-            sandbox.stub(momentStub, 'day').returns(3)
-            targetObservable = target.parsePdf().subscribe(null, error => {
-                expect(error).to.be.an('error')
-                expect(error.message).to.equal(`CAN'T PROPERLY PARSE OCR DATA`)
+            sandbox.stub(targetStubs.fs, 'createReadStream')
+            sandbox.stub(targetStubs.request, 'post', (options, callback) => callback(null, {}))
+            sandbox.stub(JSON, 'parse').returns({OCRText: [['11', '12'], ['21', '22']]})
+            sandbox.stub(targetStubs.fs, 'writeFileSync')
+            targetObservable = target.extractPdfText().subscribe(result => {
+                TestUtils.asyncTryCatch(done, () => {
+                    expect(result).to.equal('11\n12\n21\n22')
+                })
             })
-        })
+        })         
     })
 })

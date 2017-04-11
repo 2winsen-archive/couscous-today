@@ -5,69 +5,49 @@ const base64 = require('base-64')
 const fs = require('fs')
 const _ = require('lodash')
 const moment = require('moment')
-const CouscousChecker = require('models/couscous-checker.model')
-    
-const readFileAsJson = (path) => JSON.parse(fs.readFileSync(path, 'utf8'))
+const OcrException = require('exceptions/ocr-exception')
 
-const getOcrResponse = pdfPath => {
-    const username = config.get('ocrwebservice-username')
-    const licenceCode = config.get('ocrwebservice-licence-code')
-
-    return Rx.Observable.create(observer => {
-        const DOWNLOADS_DIR = config.get('downloads-dir')
-        const jsonPath = `${DOWNLOADS_DIR}/sunny-${moment().format('YYYY-MMM-DD')}.json`
-        if (fs.existsSync(jsonPath)) {
-            observer.next(readFileAsJson(jsonPath))
-            return
-        }
-        const options = {
-            url: config.get('ocrwebservice-rest-url'),
-            headers: {
-                'Authorization': `Basic ${base64.encode(username + ':' + licenceCode)}`,
-                'Content-Type': 'application/json'
-            },
-            formData: {
-                my_file: fs.createReadStream(pdfPath)
-            }
-        }
-        request.post(options, (err, httpResponse, body) => {
-            if (err) {
-                observer.error('UNABLE TO CONNECT TO OCR SERVICE')
-                return
-            }
-            fs.writeFileSync(jsonPath, body)
-            observer.next(readFileAsJson(jsonPath))
-        })
-    })
-}
-
-const parseOcrResponse = response => {
-    const LATVIAN_WEEK_DAYS = [
-        'PIRMDIENA',
-        'OTRDIENA',
-        'TRESDIENA',
-        'CETURTDIENA',
-        'PIEKTDIENA'
-    ]
-    const regEx = _(LATVIAN_WEEK_DAYS)
-        .map(date => `${date}, \\d+\\. \\w+|`)
-        .value()
-        .join('')
-        .slice(0, -1)
-    const parsedOcr = _.flatten(response.OCRText)
-        .join(' -newpage- ')
-        .split(new RegExp(regEx, 'gi'))
-        .slice()
-    if (parsedOcr && parsedOcr[moment().day()]) {
-        return parsedOcr[moment().day()]
-    }
-    throw new Error(`CAN'T PROPERLY PARSE OCR DATA`)
-}
+const readFile = (path) => fs.readFileSync(path, 'utf8')
 
 module.exports = {
-    parsePdf: pdfPath => {
-        return getOcrResponse(pdfPath)
-            .map(parseOcrResponse)
-            .map(CouscousChecker.isCouscousToday)
+    extractPdfText: pdfPath => {
+        const username = config.get('ocrwebservice-username')
+        const licenceCode = config.get('ocrwebservice-licence-code')
+
+        return Rx.Observable.create(observer => {
+            const DOWNLOADS_DIR = config.get('downloads-dir')
+            const jsonPath = `${DOWNLOADS_DIR}/sunny-${moment().format('YYYY-MMM-DD')}.json`
+            if (fs.existsSync(jsonPath)) {
+                observer.next(readFile(jsonPath))
+                return
+            }
+            const options = {
+                url: config.get('ocrwebservice-rest-url'),
+                headers: {
+                    'Authorization': `Basic ${base64.encode(username + ':' + licenceCode)}`,
+                    'Content-Type': 'application/json'
+                },
+                formData: {
+                    my_file: fs.createReadStream(pdfPath)
+                }
+            }
+            request.post(options, (err, httpResponse, body) => {
+                const MIN_HTTP_ERROR_CODE = 400
+                if (httpResponse.statusCode >= MIN_HTTP_ERROR_CODE) {
+                    const errorMessage = err || httpResponse.statusMessage
+                    observer.error(new OcrException(`OCR COMMUNICATION ERROR - ${errorMessage}`))
+                    return
+                }
+                const parsedBody = JSON.parse(body)
+                if (parsedBody.ErrorMessage) {
+                    observer.error(new OcrException(`OCR RESPONSE ERROR - ${parsedBody.ErrorMessage}`))
+                    return
+                }
+                const extractedPdfText = _.flatten(parsedBody.OCRText).join('\n')
+                fs.writeFileSync(jsonPath, extractedPdfText)
+                observer.next(extractedPdfText)
+            })
+
+        })
     }
 }

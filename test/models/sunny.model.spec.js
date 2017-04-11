@@ -1,7 +1,6 @@
 require('app-module-path').addPath(__dirname + '/../..')
 const proxyquire = require('proxyquire')
 const expect = require('chai').expect
-const Rx = require('rxjs/Rx')
 const sinon = require('sinon')
 const EventEmitter = require('events').EventEmitter
 const testEmitter = new EventEmitter()
@@ -19,9 +18,7 @@ describe('sunny.model.spec.js', () => {
         targetStubs = {
             'fs': {},
             'request': {},
-            'models/ocr-web-service.model': {
-                parsePdf: (val) => Rx.Observable.create(observable => observable.next(val))
-            }
+            'config': { get: TestUtils.empty }
         }
         target = proxyquire('models/sunny.model', targetStubs)
     })
@@ -31,22 +28,23 @@ describe('sunny.model.spec.js', () => {
         sandbox = sinon.sandbox.restore()
     })
 
-    describe('isCouscousToday', function () {
+    describe('downloadPdf', function () {
         it('should return pdf path if pdf file exists', done => {
             sandbox.stub(targetStubs.fs, 'existsSync').returns(true)
-            targetObservable = target.isCouscousToday().subscribe(result => {
-                TestUtils.asyncTryCatch(done, () => expect(result).to.match(/downloads\/sunny-\d{4}-\w{3}-\d{2}.pdf/))
+            sandbox.stub(targetStubs.config, 'get').returns('testDownloads')
+            targetObservable = target.downloadPdf().subscribe(result => {
+                TestUtils.asyncTryCatch(done, () => expect(result).to.match(/testDownloads\/sunny-\d{4}-\w{3}-\d{2}.pdf/))
             })
         })
 
         it('should return pdf path if pdf file needs to be downloaded', done => {
             sandbox.stub(targetStubs.fs, 'existsSync').returns(false)
+            sandbox.stub(targetStubs.config, 'get').returns('testDownloads')
             sandbox.stub(targetStubs.fs, 'createWriteStream').returns(testEmitter)
             sandbox.stub(targetStubs.request, 'get').returns({ pipe: () => { } })
-            targetObservable = target.isCouscousToday().subscribe(result => {
+            targetObservable = target.downloadPdf().subscribe(result => {
                 TestUtils.asyncTryCatch(done, () => {
-                    expect(result).to.match(/downloads\/sunny-\d{4}-\w{3}-\d{2}.pdf/)
-
+                    expect(result).to.match(/testDownloads\/sunny-\d{4}-\w{3}-\d{2}.pdf/)
                 })
             })
             testEmitter.emit('finish')
@@ -56,8 +54,11 @@ describe('sunny.model.spec.js', () => {
             sandbox.stub(targetStubs.fs, 'existsSync').returns(false)
             sandbox.stub(targetStubs.fs, 'createWriteStream').returns(testEmitter)
             sandbox.stub(targetStubs.request, 'get').returns({ pipe: () => { } })
-            targetObservable = target.isCouscousToday().subscribe(null, err => {
-                TestUtils.asyncTryCatch(done, () => expect(err).to.equal('PROBLEM SAVING SUNNY PDF FILE'))
+            targetObservable = target.downloadPdf().subscribe(null, err => {
+                TestUtils.asyncTryCatch(done, () => {
+                    expect(err).to.be.instanceof(Error)
+                    expect(err.message).to.equal('PROBLEM SAVING SUNNY PDF FILE')
+                })
             })
             testEmitter.emit('error')
         })

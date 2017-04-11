@@ -6,7 +6,7 @@ describe('couscous-checker.model.spec.js', () => {
     let target
 
     beforeEach(() => {
-        target = proxyquire('models/couscous-checker.model.js', {})
+        target = proxyquire('models/couscous-checker.model', {})
     })
 
     describe('isCouscousToday', function () {
